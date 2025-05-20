@@ -1,1 +1,1 @@
-MiDAS course data and exercises. 2025 
+**MiDAS course data and exercises. 2025** 
