@@ -1,0 +1,671 @@
+---
+title: "MiDAS_course_2025"
+author: "Miriam Peces, Sofie Zacho Vestergaard, Marta Nierychlo"
+date: "`r format(Sys.time(), '%Y-%m-%d')`, Aalborg, Denmark"
+output: html_document
+---
+
+>Note: This is an R markdown report see this [cheat sheet](https://goo.gl/QM4Psf) for more information on how to make nice Rmarkdown documents.
+
+
+# **Background to the project**
+The dataset contains timeseries data from 4 Danish Wastewater Treatment Plants (WWTPs) from year 2020 collected in the frame of [MiDAS project](https://midasfieldguide.org). The following excersices aim to get you familiar with the main microbial community analysis using the `ampvis2` package, and other auxiliary packages such as `ggplot2` for nice plots and `dplyr` for data wrangling.
+
+## Install ampvis2
+Installation instructions and guides for `ampvis2` can be found on [the associated homepage](https://kasperskytte.github.io/ampvis2/articles/ampvis2.html). If you need to install it, please execute the code from the first chunk below (for windows users you need to start Rstudio as administrator). 
+
+Note: `eval=F` in the `code chunk` header means that it is not evaluated (run) when the html is build.
+```{r, eval = F}
+#install.packages("remotes")
+#remotes::install_github("kasperskytte/ampvis2")
+```
+
+
+## Load the packages
+Remember to load the packages before you try to use the associated functions.
+```{r, warning = F, message=F}
+library(ampvis2)
+library(tidyverse)
+library(data.table)
+```
+
+# **1. Load and prepare the data for analysis** 
+## 1.1 Set your working directory
+```{r, eval = FALSE}
+setwd("..change to your directory..") 
+```
+
+
+## 1.2 Load the data into R
+With ampvis2 we can load all the necessary files into a single object, to make the further analysis easier and ordered. You can call it anything, but it's best to keep it short but meaningful
+To make the analysis easy the metadata, taxonomy and asvtable is combined into a single object `d`. You could name it however you like. 
+```{r}
+d_midas <- amp_load(otutable = "data/ASVtable.tsv",
+              taxonomy = "data/ASVs.R1.midas53.sintax",
+              metadata = "data/metadata_midascourse.txt",
+              fasta = "data/ASVs.R1.fa") # This one is optional, but handy if you need to merge datasets processed in different runs
+```
+
+##### **Q: What does the warning mean?**
+
+
+## 1.3 Let's explore the original data sets: 
+ASV-table. It contains the ASV ID (e.g. "ASV15", even though the column name says OTU, it contain ASVs), which can be linked to the original DNA sequence; the sample-identifier (e.g. "MQ201118-152"); the number of reads associated to each ASV in each sample (e.g. "ASV1" is seen 1539 times in sample "MQ201118-152"). 
+```{r, message = F}
+asvtable <- read_delim(file = "data/ASVtable.tsv", delim = "\t")
+
+
+asvtable[c(2,4,5), c(1,2,3,142)]
+```
+
+
+We also load the metadata which contains information on each sample. Note that the **SampleID** is what connects your metadata to your ASV-table.
+```{r, message = F}
+metadata <- read.delim("data/metadata_midascourse.txt")
+
+head(metadata)
+```
+
+We can also check that everything in the ampvis2 object is correct, and get an overview of the object
+```{r}
+head(d_midas$abund)
+```
+```{r}
+tail(d_midas$metadata) #you can also look at the end of the data.frame
+```
+```{r}
+head(d_midas$tax)
+```
+##### **Q: What are the minimum and maximum number of reads in the dataset?**
+```{r}
+print(d_midas)
+```
+
+##### **Q: What are the minimum and maximum number of reads in Ribe?**
+```{r}
+print(amp_subset_samples(d_midas, SampleSite == "Ribe"))
+```
+
+## 1.4 Add/modify metadata
+Sometimes the data types in the metadata columns are not what we want. For example, we would like *SampleDate* to be a Date column, but now is character. This can create some conflicts later on, so it's better to change upfront. Also, you can create a new column in the metadata with the `Month` information (as a character) based on the `SampleDate` column or as a factor if you'd like to have the months names. 
+```{r}
+# Check the data types in the metadata
+str(d_midas$metadata)
+
+# Let's modify the type of SampleDate
+d_midas$metadata$SampleDate <- as.Date(d_midas$metadata$SampleDate, format = c("%d/%m/%Y"))
+
+
+# Add month information as character
+d_midas$metadata$Month <- as.character(format(as.Date(d_midas$metadata$SampleDate),'%m'))
+
+# Tip, use %B if you prefer to use the month name, and use factor() to order the month names chronologically
+d_midas$metadata$MonthName <- factor(format(as.Date(d_midas$metadata$SampleDate),'%B'),
+                                     levels = month.name)
+
+# Check the data types in the metadata
+str(d_midas$metadata)
+```
+
+Remove unnecessary files
+```{r}
+rm(asvtable, metadata)
+```
+
+
+
+# **Basic QC analysis**
+Evaluation of negative controls: as we often work with tiny amounts of DNA contamination often occur. This could be from other samples, yourself and even the kits/reagents we use. Hence, it is important to take a critical look at the negative controls compared to the real samples. However, in the interest of time you can assume that problematic samples have been removed from the data set.
+
+## 1. Rarefaction curves
+The goal of this analysis is to evaluate if we have sequenced enough reads pr. sample to represent the diversity in the samples. This is often a subjective decision. For every sample, we take 1 read at a time, and evaluate if this belongs to an ASV we have already observed, or if this read represents new diversity (and ASV that has not been observed before). Every time we evaluate a new read we move 1 point on the x-axis and if it is a new ASV we also move 1 point up on the y-axis. When the curve is steep we discover new ASVs often, indicating that we need to sequence more reads to capture the diversity in the sample. When the curve flattens, we rarely observe new ASVs, indicating that we have captured most of the diversity in the sample. Often you have to compromise with the number of reads in order to keep more samples in your analysis.
+```{r, warning=F, fig.align='center'}
+amp_rarecurve(data = d_midas, 
+              color_by = "SampleSite", 
+              stepsize = 1000)
+```
+
+
+
+The function `amp_alphadiv` takes the metadata and appends the number of reads and ASVs in each sample which then can be used for further analysis. 
+```{r}
+stats <- amp_alphadiv(data = d_midas)
+head(stats)
+```
+
+
+## 2. Check the number of reads produced pr. sample.
+
+>Note: You can use "+" to modify all ampvis2 plots as behind the surface they are just ggplot2 objects. Here we change a number of features (e.g. y axis title or x axis label position).
+
+```{r, fig.align='center', fig.dim=c(15, 7)}
+ggplot(stats, 
+       aes(x = SampleID, 
+           y = Reads, 
+           color = SampleSite)) +
+  geom_jitter(width = 0.1) +
+  facet_wrap(~SampleSite, scales = "free_x", nrow = 1) +
+  ylab("Number of reads") +
+  theme_classic() +
+  theme(panel.grid.major = element_line(color = "grey90"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(breaks = c(1000,5000,10000,50000,100000, 150000), limits = c(1,150000))
+```
+
+## 3. Subset to a miminum number of reads per sample
+After we have decided that we don't trust that samples with less than 10000 we remove them from our analysis. We store the subset in the object "ds_midas".
+```{r, warning = F}
+ds_midas <- amp_subset_samples(data = d_midas, 
+                               minreads = 10000)
+
+amp_rarecurve(data = ds_midas, 
+              color_by = "SampleSite", 
+              stepsize = 1000) + 
+  xlim(0,100000) +
+  ylim(0,6000) +
+  geom_vline(xintercept=10000, color = "darkred", lty = 2) +
+  theme_classic() +
+  theme(legend.position = "bottom")
+```
+
+
+## 4. Count the number of samples per plant
+Use the function `count()` from the tidyverse package to summarize how many samples were taken at each WWTP as a simple table. You could also visualize it using e.g. `geom_col()` or `geom_bar()` from the ggplot2 package.
+```{r, fig.align='center'}
+# Calculate counts
+ds_midas$metadata %>%
+  group_by(SampleSite) %>%
+  count()
+
+# Option 1: using geom_col
+ds_midas$metadata %>%
+  group_by(SampleSite) %>%
+  count() %>% 
+  ggplot(aes(x = SampleSite,
+             y = n,
+             fill = SampleSite)) +
+  geom_col() 
+
+# Option 2: using geom_bar
+ds_midas$metadata %>%
+  ggplot() +
+  geom_bar(aes(SampleSite, 
+               fill = SampleSite), stat = "count")
+```
+
+## 5. Rarefy
+For some analyses it is preferable to rarefy the dataset, in other words standardise sequencing depth across samples, to make fair comparisons. It is a topic that gets highly debated in literature since it produces a "data-loss", but in general it is advisable to use it when performing alpha diversity comparisons.  
+```{r}
+dsr_midas <- amp_subset_samples(ds_midas, 
+                                rarefy = 10000,
+                                removeAbsentOTUs = TRUE)
+
+# alternatively you can use amp_rarefy()
+```
+
+##### **Q: Should we worry about the warning?**
+
+
+## 6. Normalise
+For some analyses we may want to have our ampvis2 object to normalise the ASv read counts to 100 (relative abundance). Many ampvis functions have the option to normalise when calling it.
+```{r}
+dsn_midas <- amp_subset_samples(ds_midas, 
+                                normalise = TRUE)
+```
+
+
+
+# **Data analysis**
+
+## 1. Alpha diversity
+In microbial community analysis we often also quantify the diversity of the community in any single sample. This can be quantified with a single number that takes into account the number and abundance of the individual taxa. There are numerous ways of calculating these `diversity indices`, and many can be calculated using the `amp_alpha_diversity()` function. The results are appended to the end of metadata as simple columns.
+```{r}
+alpha <- amp_alpha_diversity(data = dsr_midas)
+head(alpha)
+```
+
+Plot the species richness - `ObservedOTUs` and Shannon diversity of the `alpha` data set using the `geom_boxplot()` from the ggplot2 package. See e.g. [this example](http://www.sthda.com/english/wiki/ggplot2-box-plot-quick-start-guide-r-software-and-data-visualization. In which plant the microbial community is least diverse?
+```{r, fig.align='center'}
+ggplot(alpha, 
+       aes(x = SampleSite, 
+                  y = uniqueOTUs, 
+                  color = SampleSite)) +
+  geom_boxplot() +
+  theme_minimal()
+
+ggplot(alpha, 
+       aes(x = SampleSite, 
+                  y = Shannon, 
+                  color = SampleSite)) +
+  geom_boxplot() +
+  theme_minimal()
+```
+
+### 1.1 Alpha-diversity additional tasks
+Compare the alpha diversity results using the non-rarefied dataset. What are your observations?
+```{r, fig.align='center'}
+alpha_nr <- amp_alpha_diversity(data = ds_midas)
+
+
+ggplot(alpha_nr, 
+       aes(x = SampleSite, 
+                  y = uniqueOTUs, 
+                  color = SampleSite)) +
+  geom_boxplot() +
+  theme_minimal()
+
+ggplot(alpha_nr, 
+       aes(x = SampleSite, 
+                  y = Shannon, 
+                  color = SampleSite)) +
+  geom_boxplot() +
+  theme_minimal()
+```
+
+
+
+## **2. Beta diversity**
+When we are comparing between samples we call it beta-diversity. One of the most common ways or comparing large data sets and identify similarities and differences are using ordination. See [this guide](https://kasperskytte.github.io/ampvis2/articles/ampvis2.html) for an introduction to the topic.
+Ordination is trying to show you the largest differences between samples. In ordination we take the ASV table with 1000's of bacteria and try to visualize which samples have similar microbial communities. Samples (colored dots) located close together have similar microbial communities, while samples located far apart have different microbial communities. There are many versions of the ordination. One of the most simple and commonly used is `PCA` where the raw ASV counts are often transformed using `hellinger` transformation that takes the square root of the relative abundance. See [this guide](https://sites.google.com/site/mb3gustame/reference/data-transformations) for short intro on `Hellinger` and other data transformations. In addition to transforming the data, different types of ordination can be made (PCoA or NMDS are also often used).
+
+### 2.1 Perform a PCA
+**Q: What can you say about the similarity of microbial communities in the 4 WWTPs based on PCA plot?**
+```{r, fig.align='center'}
+amp_ordinate(data = ds_midas, 
+             transform = "Hellinger", 
+             type = "PCA",
+             sample_color_by = "SampleSite")
+```
+
+### 2.2 Problematic samples
+Identify the outlier (by e.g. using amp_ordination & sample_label_by option or amp_heatmap & adjusting the "Group_by" parameter to show the "Sample"), subset the dataset to remove the outlier sample and replot the ordination and heatmap.
+```{r, fig.align='center'}
+amp_ordinate(data = ds_midas, 
+             transform = "Hellinger", 
+             type = "PCA",
+             sample_color_by = "SampleSite",
+             sample_label_by = "SampleID",
+             group_by = "SampleSite")
+```
+
+Remove outlier. Depending on which stage of your analysis, it can be necessary to re-do it with the outlier(s) removed from the beginning. For this exercise we will move from here on without the outlier: 
+**Create new ampvis2 object**
+```{r}
+ds_midas_wo <- amp_subset_samples(ds_midas, SampleID != "MQ201118-182")
+dn_midas_wo <- amp_subset_samples(ds_midas, SampleID != "MQ201118-182", normalise = TRUE)
+```
+
+Check that we have effectively removed the outlier
+```{r, fig.align='center'}
+amp_ordinate(data = ds_midas_wo, 
+             transform = "Hellinger", 
+             type = "PCA",
+             sample_color_by = "SampleSite")
+```
+
+### 2.3 Explore ordinations
+Which bacteria are mainly causing the differences among the observed clusters (hint: try using `species_nlabels` and `species_label_taxonomy`). Keep the ordination results handy, how do the ordination relate the ordination results to your `heatmap`?
+```{r, fig.align='center'}
+amp_ordinate(data = ds_midas_wo, 
+             transform = "Hellinger", 
+             type = "PCA",
+             sample_color_by = "SampleSite",
+             species_plot = FALSE,
+             species_nlabels = 10,
+             species_label_taxonomy = "Genus")
+```
+
+
+### 2.4. Beta-diveristy addtional tasks
+Try different ordinations, e.g PCoA based on bray-curtis distance
+```{r, fig.align='center'}
+amp_ordinate(data = ds_midas_wo, 
+             type = "PCOA",
+             distmeasure = "bray",
+             transform = "none",
+             sample_color_by = "SampleSite")
+```
+
+(Advanced) Evaluate the statistical significance
+Install vegan package (install only if you don't have it)
+```{r}
+# make bray-curtis diversity matrix
+bray_curtis_dist <- vegan::vegdist(t(ds_midas_wo$abund), method = "bray")
+
+# Perform adonis testing for difference between WWTPs
+adonis_samplesite_bray <- vegan::adonis2(bray_curtis_dist ~ SampleSite, data = ds_midas_wo$metadata)
+
+# Create label for plot with coordinates for plotting
+adonis_result_label <- paste0("R2 = ", round(adonis_samplesite_bray$R2[[1]],2), "\np < ", adonis_samplesite_bray$`Pr(>F)`[1])
+  
+  
+```
+
+Plot adding the statistical significance
+```{r, fig.align='center'}
+amp_ordinate(data = ds_midas_wo, 
+             type = "PCOA",
+             distmeasure = "bray",
+             transform = "none",
+             sample_color_by = "SampleSite") +
+  ggtitle("PCoA based on Bray-Curtis dissimilarity") +
+  annotate("label", 
+           x = 0.55, y = -0.35, label = adonis_result_label) 
+
+```
+
+## **3. Microbial abundance**
+
+### 3.1 Which are the 25 most abundant genera in each Plant?
+We normally start data analysis by making overview using the `amp_heatmap()` function. Modify the heatmap below using the relevant options - inspirations can be found in the [Get started](https://kasperskytte.github.io/ampvis2/articles/ampvis2.html) guide.
+```{r, fig.align='center', warning=FALSE}
+amp_heatmap(data = dn_midas_wo,
+            group_by = "SampleSite",
+            tax_aggregate = "Genus",
+            normalise = FALSE, # If you are using the non-normalised object, set normalise = TRUE
+            tax_show = 25,
+            plot_values_size = 3) +
+  ggtitle("Top 25 genera using MiDAS 5.3") +
+  theme(plot.title = element_text(face = "bold", size = 12)) # Tip, ampvis2 works in combination with ggplot, so you can adjust all the aesthetics. 
+
+```
+
+### 3.2 Try visualising with a boxplot
+```{r, fig.align='center', warning=FALSE}
+amp_boxplot(data = dn_midas_wo,
+            normalise = FALSE,
+            group_by = "SampleSite",
+            tax_show = 25,
+            tax_aggregate = "Genus",
+            tax_add = "Phylum") +
+  scale_y_sqrt(breaks = c(0, 2, 5, 10, 20)) # Tip, ampvis2 works in combination with ggplot, so you can adjust all the aesthetics. 
+```
+
+### 3.3 Which are the 25 most abundant genera in each WWTP and month?
+```{r, fig.align='center', fig.dim=c(12, 7), warning=FALSE}
+amp_heatmap(data = dn_midas_wo,
+            group_by = "MonthName",
+            tax_aggregate = "Genus",
+            normalise = FALSE, # If you are using the non-normalised object, set normalise = TRUE
+            facet_by = "SampleSite",
+            tax_show = 25,
+            plot_values_size = 3) 
+```
+
+### 3.4 Which genera within Proteobacteria are the most abundant across all samples?
+```{r, fig.align='center', fig.dim=c(20, 7), warning=FALSE}
+dn_proteobacteria <- amp_subset_taxa(dn_midas_wo, tax_vector = "p__Proteobacteria")
+
+
+amp_heatmap(data = dn_proteobacteria,
+            group_by = "SampleDate",
+            tax_aggregate = "Genus",
+            normalise = FALSE, # If you are using the already normalised object, set normalise = FALSE
+            facet_by = "SampleSite",
+            tax_show = 10,
+            tax_add = "Phylum",
+            showRemainingTaxa = TRUE,
+            plot_values_size = 3) 
+```
+
+
+### 3.5 Taxonomic reference database
+Compare the results of microbial composition based on MiDAS 5 vs SiLVA 138.2
+
+**Q: Does the choice of taxonomic database influence alpha and beta-diversity analysis? When does it matter?**
+
+Create an ampvis2 file using Silva taxonomy
+```{r, echo = FALSE}
+d_silva <- amp_load(otutable = "data/ASVtable.tsv",
+              taxonomy = "data/ASVs_SILVA_138.2.R1.sintax",
+              metadata = "data/metadata_midascourse.txt",
+              fasta = "data/ASVs.R1.fa") 
+```
+
+Create the normalised dataset removing the outlier and subseting for samples with at least 10000 reads (tip: you can do all at once)
+```{r, echo=FALSE}
+dn_silva_wo <- amp_subset_samples(d_silva, 
+                                  minreads = 10000,
+                                  SampleID != "MQ201118-182", 
+                                  normalise = TRUE)
+
+# Remeber to create the auxiliary columns
+dn_silva_wo$metadata$MonthName <- factor(format(as.Date(dn_silva_wo$metadata$SampleDate),'%B'),
+                                     levels = month.name)
+```
+
+What are the most abundant 25 genera based on silva?
+```{r, fig.align='center'}
+amp_heatmap(data = dn_silva_wo,
+            group_by = "SampleSite",
+            tax_aggregate = "Genus",
+            normalise = FALSE, # If you are using the non-normalised object, set normalise = TRUE
+            tax_show = 25,
+            plot_values_size = 3) +
+  ggtitle("Top 25 genera using SiLVA 138.2") +
+  theme(plot.title = element_text(face = "bold", size = 12))
+
+```
+
+##### **Q: why is it important to get good taxonomic classifications? What strikes you the most?**
+
+
+
+## **4. Additonal tasks, timeseries**
+### 4.1 Time-series ordinations 
+Make 2 PCA plots for Kalundborg and Randers using `sample_trajectory` option to see the changes in the community over time. Comment on the stability of the communities in the two WWTPs. What do you think may cause the progression of the communities that you see on the plot?
+```{r, fig.align='center'}
+# Tip, the column date in the medatada is a character, we have to transform it to date format
+ds_midas_wo$metadata$SampleDate <- as.Date(ds_midas_wo$metadata$SampleDate, format = c("%d/%m/%Y"))
+
+randers <- amp_subset_samples(ds_midas_wo, SampleSite == "Randers")
+
+amp_ordinate(randers,
+  type = "PCA",
+  transform = "Hellinger",
+  sample_color_by = "SampleDate",
+  sample_colorframe_label = "SampleSite", 
+  sample_trajectory = "SampleDate", 
+  sample_trajectory_group = "SampleSite",
+  sample_label_by = "Month"
+)
+
+kal <- amp_subset_samples(ds_midas_wo, SampleSite == "Kalundborg")
+
+amp_ordinate(kal,
+  type = "PCA",
+  transform = "Hellinger",
+  sample_color_by = "SampleDate",
+  sample_colorframe_label = "SampleSite", 
+  sample_trajectory = "SampleDate", 
+  sample_trajectory_group = "SampleSite",
+  sample_label_by = "Month"
+)
+```
+
+### 4.2 Timeseries plots
+Subset the `Tetrasphaera`, `Ca. Phosphoribacter`, `Azonexus` and `Ca, Accumulibacter`genus data from Randers WWTP using `amp_subset_taxa()` and `amp_timeseries()` functions; and plot the data to identify the temporal dynamics of the different polyphospate accumulating genera. 
+```{r, fig.align='center'} 
+subset <- amp_subset_taxa(data = dn_midas_wo, tax_vector = c("g__Tetrasphaera", "g__Ca_Phosphoribacter", "g__Azonexus", "g__Ca_Accumulibacter")) %>% 
+  amp_subset_samples(SampleSite == "Randers")
+
+subset$metadata$SampleDate <- as.Date(subset$metadata$SampleDate, format = c("%d/%m/%Y"))
+  
+amp_time_series(subset,
+                time_variable = "SampleDate", 
+                tax_aggregate = "Genus",
+                normalise = FALSE)
+```
+
+### 4.3 Functional information
+Subset the data for Lynetten and plot the heatmap showing the 25 most abundant genera. The `amp_heatmap` function offers the possibility of directly linking the genus-level plot with functional information from [midas field guide](https://midasfieldguide.org/guide/search). To do that, use:
+
+option plot_functions = TRUE
+functions = c("Filamentous", "AOB", "NOB", "PAO", "GAO")
+
+How many of the genera have the functional information available?
+What is the function of the most abundant bacteria in this WWTP?
+```{r, fig.align='center'}
+lyn <- amp_subset_samples(dn_midas_wo, SampleSite == "Lynetten")
+
+amp_heatmap(data = lyn,
+            tax_aggregate = "Genus",
+            normalise = FALSE,
+            group_by = "MonthName",
+            facet_by = "SampleSite",
+            tax_show = 25,
+            plot_functions = TRUE,
+            functions = c("Filamentous", "AOB", "NOB", "PAO", "GAO"))
+
+```
+
+## **5. Core communities**
+(Advanced) We will evaluate the core communities in our dataset, First we need to choose the desired taxonomic level. For this exercise we will choose "Species". The analysis is done outside ampvis2, therefore we will export the ampvis2 object to a long format data.frame
+```{r}
+tax <- dn_midas_wo$tax[1:7]%>%  unique() # change according to taxonomic level
+
+# export ampvis object
+dlong <- amp_export_long(dn_midas_wo,
+                         metadata_vars = "SampleSite",
+                         tax_levels = c("Species")) %>% 
+  filter(!Species %in% c("")) # remove unclassified on spp level
+```
+
+Calculate the relative abundance per species and the mean abundance in each WWTP
+```{r}
+dlongsum <- dlong %>% 
+  group_by(SampleID, Species) %>% 
+  mutate(sumSpp = sum(count)) %>% 
+  ungroup() %>% 
+  group_by(SampleSite, Species) %>% 
+  mutate(meanSppSite = mean(sumSpp))
+```
+
+Define core groups based on abundance and create combined data.frame
+```{r}
+core <- dlongsum %>% 
+  select(SampleSite,Species, meanSppSite) %>% 
+  unique() %>% #take only relevant columns
+  group_by(Species) %>% 
+  mutate(nObs = sum(meanSppSite > 0),
+         nCore = sum(meanSppSite > 0.1))
+
+core_loose <- core[(core$nCore >= n_distinct(core$SampleSite)*0.2),] %>% #loose core (20% plants)
+  group_by(Species) %>% 
+  summarise(mean_abu = mean(meanSppSite)) %>% 
+  arrange(desc(mean_abu))
+core_loose[,"Category"] <- "loose core"
+
+core_general <- core[(core$nCore >= n_distinct(core$SampleSite)*0.5),] %>% #general core (50% plants)
+  group_by(Species) %>% 
+  summarise(mean_abu = mean(meanSppSite)) %>% 
+  arrange(desc(mean_abu))
+core_general[,"Category"] <- "general core"
+
+core_strict <- core[(core$nCore >= n_distinct(core$SampleSite)*0.8),] %>% #strict core (80% plants)
+  group_by(Species) %>% 
+  summarise(mean_abu = mean(meanSppSite)) %>%
+  arrange(desc(mean_abu))
+core_strict[,"Category"] <- "strict core"
+
+# combine stuff
+core_loose <- filter(core_loose, !(Species %in% core_general$Species)) #loose core (>20%) should not include general core (>50%)
+core_general <- filter(core_general, !(Species %in% core_strict$Species))#general core (>50%) should not include strict core (>80%)
+
+coretot <- rbind(core_strict, core_general, core_loose) %>% 
+  left_join(., tax , by = 'Species')
+```
+
+Visualise how many species are per core category and the total mean cummulative abundance the three categories explain
+```{r, fig.align='center'}
+coretot %>% 
+  ggplot() +
+  geom_bar(aes(x = factor(Category, levels = c("strict core", "general core", "loose core"))),
+               stat = "count") +
+  xlab("") +
+  ylab("Number of species") +
+  theme_minimal()
+
+
+coretot %>% 
+  group_by(Category) %>% 
+  summarise(sum_mean = sum(mean_abu),
+            .groups = "drop") %>% 
+  ggplot() +
+  geom_col(aes(x = factor(Category, levels = c("strict core", "general core", "loose core")),
+               y = sum_mean)) +
+  xlab("") +
+  ylab("Total cummunlative abundance (%)") +
+  theme_minimal()
+  
+```
+
+### 5.1 Core community additional tasks
+Find the core communities at ASV level and visualise the outcomes
+```{r, fig.align='center'}
+# export taxonomy
+tax <- dn_midas_wo$tax[1:7]
+tax$OTU <- rownames(tax)
+
+
+# export ampvis object
+dlong <- amp_export_long(dn_midas_wo,
+    metadata_vars = "SampleSite",
+    tax_levels = c("OTU"))
+  
+  
+core <- dlong[, .(mean = mean(count)), by = c("OTU", "SampleSite")] 
+core <- core[OTU!=""]
+core[, nObs := sum(mean > 0), by = OTU]
+core[, nCore := sum(mean > 0.1), by = OTU]
+
+  
+core_loose <- core[(core$nCore >= n_distinct(core$SampleSite)*0.2),] %>% #loose core (20% plants)
+    group_by(OTU) %>% summarise(mean_abu = mean(mean)) %>% arrange(desc(mean_abu))
+  core_loose[,"Category"] <- "loose core"
+  
+core_general <- core[(core$nCore >= n_distinct(core$SampleSite)*0.5),] %>% #general core (50% plants)
+    group_by(OTU) %>% summarise(mean_abu = mean(mean)) %>% arrange(desc(mean_abu))
+  core_general[,"Category"] <- "general core"
+  
+core_strict <- core[(core$nCore >= n_distinct(core$SampleSite)*0.8),] %>% #strict core (80% plants)
+    group_by(OTU) %>% summarise(mean_abu = mean(mean)) %>%
+    arrange(desc(mean_abu))
+  core_strict[,"Category"] <- "strict core"
+  
+  
+  
+# combine stuff
+core_loose <- filter(core_loose, !(OTU %in% core_general$OTU)) #loose core (>20%) should not include general core (>50%)
+core_general <- filter(core_general, !(OTU %in% core_strict$OTU))#general core (>50%) should not include strict core (>80%)
+  
+coretot <- rbind(core_strict, core_general, core_loose) %>% 
+  left_join(., tax, by = 'OTU')
+
+# Plot
+coretot %>% 
+  ggplot() +
+  geom_bar(aes(x = factor(Category, levels = c("strict core", "general core", "loose core"))),
+               stat = "count") +
+  xlab("") +
+  ylab("Number of ASV") +
+  theme_minimal()
+
+
+coretot %>% 
+  group_by(Category) %>% 
+  summarise(sum_mean = sum(mean_abu),
+            .groups = "drop") %>% 
+  ggplot() +
+  geom_col(aes(x = factor(Category, levels = c("strict core", "general core", "loose core")),
+               y = sum_mean)) +
+  xlab("") +
+  ylab("Total cummunlative abundance (%)") +
+  theme_minimal()
+```
+
+
+
+
+
+  
