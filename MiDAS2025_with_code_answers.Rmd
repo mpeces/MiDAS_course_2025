@@ -231,7 +231,7 @@ Plot the species richness - `ObservedOTUs` and Shannon diversity of the `alpha` 
 ```{r, fig.align='center'}
 ggplot(alpha, 
        aes(x = SampleSite, 
-                  y = uniqueOTUs, 
+                  y = ObservedOTUs, 
                   color = SampleSite)) +
   geom_boxplot() +
   theme_minimal()
@@ -252,7 +252,7 @@ alpha_nr <- amp_alpha_diversity(data = ds_midas)
 
 ggplot(alpha_nr, 
        aes(x = SampleSite, 
-                  y = uniqueOTUs, 
+                  y = ObservedOTUs, 
                   color = SampleSite)) +
   geom_boxplot() +
   theme_minimal()
