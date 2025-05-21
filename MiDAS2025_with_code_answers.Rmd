@@ -66,13 +66,16 @@ metadata <- read.delim("data/metadata_midascourse.txt")
 head(metadata)
 ```
 
-We can also check that everything in the ampvis2 object is correct, and get an overview of the object
+We can also check that everything in the ampvis2 object is correct, and get an overview of the object.
+Look at the first rows of the ASV table inside the ampvis2 object:
 ```{r}
 head(d_midas$abund)
 ```
+Look at the last rows of the metadata inside the ampvis2 object:
 ```{r}
 tail(d_midas$metadata) #you can also look at the end of the data.frame
 ```
+Look at the first rows of the taxonomy table inside the ampvis2 object:
 ```{r}
 head(d_midas$tax)
 ```
@@ -102,8 +105,10 @@ d_midas$metadata$Month <- as.character(format(as.Date(d_midas$metadata$SampleDat
 # Tip, use %B if you prefer to use the month name, and use factor() to order the month names chronologically
 d_midas$metadata$MonthName <- factor(format(as.Date(d_midas$metadata$SampleDate),'%B'),
                                      levels = month.name)
+```
 
-# Check the data types in the metadata
+Check the data types in the metadata after modifications
+```{r}
 str(d_midas$metadata)
 ```
 
@@ -111,7 +116,6 @@ Remove unnecessary files
 ```{r}
 rm(asvtable, metadata)
 ```
-
 
 
 # **Basic QC analysis**
@@ -124,7 +128,6 @@ amp_rarecurve(data = d_midas,
               color_by = "SampleSite", 
               stepsize = 1000)
 ```
-
 
 
 The function `amp_alphadiv` takes the metadata and appends the number of reads and ASVs in each sample which then can be used for further analysis. 
@@ -539,6 +542,9 @@ dlongsum <- dlong %>%
   ungroup() %>% 
   group_by(SampleSite, Species) %>% 
   mutate(meanSppSite = mean(sumSpp))
+
+
+head(dlongsum)
 ```
 
 Define core groups based on abundance and create combined data.frame
@@ -574,6 +580,8 @@ core_general <- filter(core_general, !(Species %in% core_strict$Species))#genera
 
 coretot <- rbind(core_strict, core_general, core_loose) %>% 
   left_join(., tax , by = 'Species')
+
+head(coretot)
 ```
 
 Visualise how many species are per core category and the total mean cummulative abundance the three categories explain
