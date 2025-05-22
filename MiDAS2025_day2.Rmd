@@ -1,0 +1,99 @@
+---
+title: "MiDAS_course_2025"
+author: "Miriam Peces, Sofie Zacho Vestergaard, Marta Nierychlo"
+date: "`r format(Sys.time(), '%Y-%m-%d')`, Aalborg, Denmark"
+output: html_document
+---
+
+
+```{r, eval = F}
+#install.packages("remotes")
+#remotes::install_github("kasperskytte/ampvis2")
+```
+
+
+## Load the packages
+Remember to load the packages before you try to use the associated functions.
+```{r, warning = F, message=F}
+library(ampvis2)
+library(tidyverse)
+library(data.table)
+```
+
+# **1. Load and prepare the data for analysis** 
+## 1.1 Set your working directory
+```{r, eval = FALSE}
+setwd("..change to your directory..") 
+```
+
+
+## 1.2 Load the data into R
+```{r}
+d_midas <- amp_load(otutable = "data/ASVtable.tsv",
+              taxonomy = "data/ASVs.R1.midas53.sintax",
+              metadata = "data/metadata_midascourse.txt",
+              fasta = "data/ASVs.R1.fa") # This one is optional, but handy if you need to merge datasets processed in different runs
+```
+
+## 1.4 Add/modify metadata
+```{r}
+# Check the data types in the metadata
+str(d_midas$metadata)
+
+# Let's modify the type of SampleDate
+d_midas$metadata$SampleDate <- as.Date(d_midas$metadata$SampleDate, format = c("%d/%m/%Y"))
+
+
+# Add month information as character
+d_midas$metadata$Month <- as.character(format(as.Date(d_midas$metadata$SampleDate),'%m'))
+
+# Tip, use %B if you prefer to use the month name, and use factor() to order the month names chronologically
+d_midas$metadata$MonthName <- factor(format(as.Date(d_midas$metadata$SampleDate),'%B'),
+                                     levels = month.name)
+```
+
+# Normalise data
+```{r}
+dsn_midas <- amp_subset_samples(d_midas,
+                                minreads = 10000,
+                                SampleID != "MQ201118-182",  
+                                normalise = TRUE)
+```
+
+
+
+
+Questions to answer
+
+Most abundant bacteria
+Q1 What is the top 25 most abundant genera?
+	hint: look into amp_heatmap()
+Q2 What is the top 25 most abundant species? And what genera are these belonging to (plot these with the species)?
+Q3 What is the top 25 most abundant species in Ribe?
+Q4 How many of the top 25 genera are filamentous and important for phosphorus removal?
+	hint: look into amp_heatmap(…, plot_functions = TRUE)
+Q5 Which genera within Proteobacteria are the most abundant across all samples?
+	hint: look into amp_subset_taxa()
+
+Compare to silva taxonomy
+Q6 How many of the ASVs are classified at genus and species level using silva?
+	hint: amp_load() with silva tax
+Q7 What are the most abundant 25 genera using silva?
+	
+
+Timeseries
+Q8 Can you make a timeserie plot for Ca. Phosphoribacter and Ca. Accumulibacter in Randers?
+	hint: look into amp_subset_taxa(), amp_subset_sample(), amp_time_series()
+Q9 Make a timeseries plot for a species and plant of your chouce
+Q10 Make a timeserie ordination for all the plants
+
+
+Core communities 
+Q11 What is the strict and general core species? (0.1% relative abundance in 80% (strict) and 50% (general) of the plants)
+	hint: Look into last part of the .Rmd file with answers you looked at yesterday
+
+
+
+
+
+
