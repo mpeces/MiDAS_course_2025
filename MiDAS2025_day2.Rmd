@@ -84,7 +84,7 @@ Q7 What are the most abundant 25 genera using silva?
 Timeseries
 Q8 Can you make a timeserie plot for Ca. Phosphoribacter and Ca. Accumulibacter in Randers?
 	hint: look into amp_subset_taxa(), amp_subset_sample(), amp_time_series()
-Q9 Make a timeseries plot for a species and plant of your chouce
+Q9 Make a timeseries plot for a species and plant of your choice
 Q10 Make a timeserie ordination for all the plants
 
 
