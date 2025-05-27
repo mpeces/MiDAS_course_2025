@@ -2,4 +2,4 @@
 #### Application of the MiDAS reference databases for microbial community analyses
 
 
-This page contains data and presentations for the hands on part of the workshop.
+This page contains data, exercises, and presentations for the hands on part of the workshop.
