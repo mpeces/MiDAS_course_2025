@@ -1,0 +1,195 @@
+---
+title: "MiDAS_course_2025"
+author: "Miriam Peces, Sofie Zacho Vestergaard, Marta Nierychlo"
+date: "`r format(Sys.time(), '%Y-%m-%d')`, Aalborg, Denmark"
+output: html_document
+---
+
+
+# Only do ONCE
+```{r, eval = F}
+install.packages("remotes")
+remotes::install_github("kasperskytte/ampvis2")
+install.packages("tidyverse")
+```
+
+
+## Load the packages
+Remember to load the packages before you try to use the associated functions.
+```{r, warning = F, message=F}
+library(ampvis2)
+library(tidyverse)
+```
+
+
+# **1. Load and prepare the data for analysis** 
+## 1.1 Set your working directory - only if you did not open script from the downloaded folder
+```{r, eval = FALSE}
+#setwd("") 
+```
+
+
+## 1.2 Load the data into R
+```{r}
+d_midas <- amp_load(otutable = "data/ASVtable.tsv",
+              taxonomy = "data/ASVs.R1.midas53.sintax",
+              metadata = "data/metadata_midascourse.txt",
+              fasta = "data/ASVs.R1.fa") # This one is optional, but handy if you need to merge datasets processed in different runs
+```
+
+
+# Inspect the data - get a summary of the ampvis object
+```{r}
+d_midas
+```
+
+# Investigate rarefaction curve
+```{r}
+amp_rarecurve(d_midas, 
+              color_by = 'SampleSite')
+```
+
+## plot the number of reads for each sample
+```{r}
+
+ggplot( amp_alpha_diversity(d_midas))+
+  geom_point(aes(x= SampleID, y = Reads, color=SampleSite)) +
+  facet_grid(~ SampleSite, scales = 'free_x', space = 'free') +
+  theme(axis.text.x = element_text(angle = 90, size=6, vjust= 0.5))
+
+```
+
+
+
+# Filter data: Remove low read samples and normalise data
+```{r}
+dsn_midas <- amp_subset_samples(d_midas,
+                                minreads = 10000, # remove samples with less than 10000 reads
+                                normalise = TRUE)
+```
+
+
+
+
+
+Questions to answer
+
+Q1 What are the top 25 most abundant genera?
+	hint: look into amp_heatmap()
+```{r}
+amp_heatmap(dsn_midas,
+            normalise = F,
+            group_by = ...,
+            tax_show = ...,
+            tax_aggregate = ...,
+            ...)
+```
+
+	
+Q2 What are the top 25 most abundant species? And what genera are these belonging to (plot these with the species)?
+```{r}
+amp_heatmap(dsn_midas,
+            normalise = F,
+            group_by = ...,
+            tax_show = ...,
+            tax_aggregate = ...,
+            tax_add = ...,
+            ...)
+```
+
+
+Q3 Try to save the heatmap from before
+```{r}
+heatmap <- amp_heatmap(dsn_midas,
+            normalise = F,
+            group_by = ...,
+            tax_show = ...,
+            tax_aggregate = ...,
+            tax_add = ...,
+            ...)
+
+ggsave("heatmap.png", heatmap,
+       width = 8, height = 6 #change to fit your needs
+       ) 
+
+```
+
+
+
+
+
+Compare to silva taxonomy
+Q4 How many of the ASVs are classified at genus and species level using silva?
+	hint: amp_load() with silva tax
+```{r}
+d_silva <- amp_load(otutable = "data/ASVtable.tsv",
+              taxonomy = "data/ASVs_SILVA_138.2.R1.sintax",
+              metadata = "data/metadata_midascourse.txt",
+              fasta = "data/ASVs.R1.fa") 
+
+dsn_silva <- amp_subset_samples(d_silva,
+                                minreads = 10000, # remove samples with less than 10000 reads
+                                normalise = TRUE)
+
+dsn_silva
+
+```
+	
+	
+Q5 What are the most abundant 25 genera using silva? Compare to MiDAS taxonomic assignment
+```{r}
+amp_heatmap(dsn_silva,
+            normalise = F,
+            group_by = ...,
+            tax_show = ...,
+            tax_aggregate = ...,
+            ...)
+```
+	
+
+Q6 Make a timeseries plot for Ca. Phosphoribacter and Ca. Accumulibacter in Randers?
+	hint: look into amp_subset_taxa(), amp_subset_sample(), amp_time_series()
+```{r}
+subset <- amp_subset_taxa(data = dsn_midas, tax_vector = c("g__Ca_Phosphoribacter", "g__Ca_Accumulibacter")) %>% 
+  amp_subset_samples(SampleSite == "Randers")
+
+subset$metadata$SampleDate <- as.Date(subset$metadata$SampleDate, format = c("%d/%m/%Y"))
+  
+amp_time_series(subset,
+                time_variable = "SampleDate", 
+                tax_aggregate = "Genus",
+                normalise = FALSE)
+```
+
+	
+Q7 Make a timeseries plot for a species and plant of your choice
+```{r}
+subset <- amp_subset_taxa(data = dsn_midas, tax_vector = c("...")) %>% 
+  amp_subset_samples(SampleSite == "...")
+
+subset$metadata$SampleDate <- as.Date(subset$metadata$SampleDate, format = c("%d/%m/%Y"))
+  
+amp_time_series(subset,
+                time_variable = "SampleDate", 
+                tax_aggregate = "Genus",
+                normalise = FALSE)
+```
+
+
+
+
+# extract questions 
+Qe1 Make an ordination plot for all plants
+  hint: look into amp_ordinate()
+Qe2 How many of the top 25 genera are filamentous?
+	hint: look into amp_heatmap(…, plot_functions = TRUE). Needs tax_aggregate at genus-level
+Qe3 Which genera within Proteobacteria are the most abundant across all samples?
+	hint: look into amp_subset_taxa()
+
+
+
+
+
+
+
+
