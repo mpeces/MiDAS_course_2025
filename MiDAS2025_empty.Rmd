@@ -5,8 +5,9 @@ date: "`r format(Sys.time(), '%Y-%m-%d')`, Aalborg, Denmark"
 output: html_document
 ---
 
-
-# Only do ONCE
+###################################
+######### Only do ONCE!!!! ########
+###################################
 ```{r, eval = F}
 install.packages("remotes")
 remotes::install_github("kasperskytte/ampvis2")
@@ -15,7 +16,6 @@ install.packages("tidyverse")
 
 
 ## Load the packages
-Remember to load the packages before you try to use the associated functions.
 ```{r, warning = F, message=F}
 library(ampvis2)
 library(tidyverse)
@@ -181,10 +181,32 @@ amp_time_series(subset,
 # extract questions 
 Qe1 Make an ordination plot for all plants
   hint: look into amp_ordinate()
+```{r}
+amp_ordinate(dsn_midas, 
+             sample_color_by = '...',
+             ...)
+
+```
+
 Qe2 How many of the top 25 genera are filamentous?
 	hint: look into amp_heatmap(…, plot_functions = TRUE). Needs tax_aggregate at genus-level
+```{r}
+amp_heatmap(dsn_midas, 
+             ...)
+
+```
+	
 Qe3 Which genera within Proteobacteria are the most abundant across all samples?
 	hint: look into amp_subset_taxa()
+```{r}
+
+```
+	
+Qe4 Make alpha diversity analysis for the data (remember to rarefy at the same time)
+  hint: look into amp_alpha_diversity()
+```{r}
+
+```
 
 
 
