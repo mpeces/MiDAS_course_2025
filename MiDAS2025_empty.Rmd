@@ -5,9 +5,8 @@ date: "`r format(Sys.time(), '%Y-%m-%d')`, Aalborg, Denmark"
 output: html_document
 ---
 
-###################################
-######### Only do ONCE!!!! ########
-###################################
+
+## Only do ONCE!!!! 
 ```{r, eval = F}
 install.packages("remotes")
 remotes::install_github("kasperskytte/ampvis2")
@@ -22,14 +21,13 @@ library(tidyverse)
 ```
 
 
-# **1. Load and prepare the data for analysis** 
-## 1.1 Set your working directory - only if you did not open script from the downloaded folder
+## Set your working directory - only if you did not open script from the downloaded folder
 ```{r, eval = FALSE}
 #setwd("") 
 ```
 
 
-## 1.2 Load the data into R
+## Load the data into an ampvis object
 ```{r}
 d_midas <- amp_load(otutable = "data/ASVtable.tsv",
               taxonomy = "data/ASVs.R1.midas53.sintax",
@@ -87,6 +85,7 @@ amp_heatmap(dsn_midas,
 
 	
 Q2 What are the top 25 most abundant species? And what genera are these belonging to (plot these with the species)?
+  Addition (optional) try to sort based on one of the plants
 ```{r}
 amp_heatmap(dsn_midas,
             normalise = F,
@@ -179,7 +178,7 @@ amp_time_series(subset,
 
 
 # extract questions 
-Qe1 Make an ordination plot for all plants
+Qe1 Make an ordination plot for all plants - Try different ordinations, e.g PCoA based on bray-curtis distance
   hint: look into amp_ordinate()
 ```{r}
 amp_ordinate(dsn_midas, 
