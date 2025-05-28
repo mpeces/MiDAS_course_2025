@@ -8,8 +8,6 @@ For the exercises we will mainly be using the [ampvis2](https://kasperskytte.git
 
 
 
-**Relevant literature**
-
-MiDAS 4 paper: https://www.nature.com/articles/s41467-022-29438-7
-
-MiDAS 5 paper: https://www.nature.com/articles/s41467-024-49641-y 
+**Relevant literature:**
+[MiDAS 4 paper](https://www.nature.com/articles/s41467-022-29438-7) and
+[MiDAS 5 paper](https://www.nature.com/articles/s41467-024-49641-y)
