@@ -2,7 +2,9 @@
 #### Application of the MiDAS reference databases for microbial community analyses
 
 
-This page contains data, exercises, and presentations for the hands on part of the workshop.
+This page contains data, exercises, and presentations for the hands on part of the MiDAS workshop.
+For the exercises we will mainly be using the [ampvis2](https://kasperskytte.github.io/ampvis2/articles/ampvis2.html) package in Rstudio.
+
 
 
 
