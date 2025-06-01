@@ -31,8 +31,7 @@ library(tidyverse)
 ```{r}
 d_midas <- amp_load(otutable = "data/ASVtable.tsv",
               taxonomy = "data/ASVs.R1.midas53.sintax",
-              metadata = "data/metadata_midascourse.txt",
-              fasta = "data/ASVs.R1.fa") # This one is optional, but handy if you need to merge datasets processed in different runs
+              metadata = "data/metadata_midascourse.txt")
 ```
 
 
@@ -50,7 +49,6 @@ amp_rarecurve(d_midas,
 
 ## plot the number of reads for each sample
 ```{r}
-
 ggplot( amp_alpha_diversity(d_midas))+
   geom_point(aes(x= SampleID, y = Reads, color=SampleSite)) +
   facet_grid(~ SampleSite, scales = 'free_x', space = 'free') +
@@ -66,9 +64,6 @@ dsn_midas <- amp_subset_samples(d_midas,
                                 minreads = 10000, # remove samples with less than 10000 reads
                                 normalise = TRUE)
 ```
-
-
-
 
 
 Questions to answer
@@ -102,7 +97,7 @@ amp_heatmap(dsn_midas,
             group_by = 'SampleSite',
             tax_show = 25,
             tax_aggregate = 'Species',
-            sort_by = 'Randers',
+            sort_by = 'WWTP_C',
             tax_add = 'Genus',
             color_vector = c('white', 'darkred'))
 ```
@@ -123,18 +118,24 @@ ggsave("heatmap.png", heatmap,
 
 ```
 
-
-
+Q4. Perform an ordination to compare the microbial structures of the different WWTPs. 
+```{r}
+amp_ordinate(data = dsn_midas, 
+             transform = "Hellinger", 
+             type = "PCA",
+             sample_color_by = "SampleSite") +
+  scale_colour_viridis_d() + # example how to customise with ggplot
+  theme_bw() # example how to customise with ggplot
+```
 
 
 Compare to silva taxonomy
-Q4 How many of the ASVs are classified at genus and species level using silva?
+Q5 How many of the ASVs are classified at genus and species level using silva?
 	hint: amp_load() with silva tax
 ```{r}
 d_silva <- amp_load(otutable = "data/ASVtable.tsv",
               taxonomy = "data/ASVs_SILVA_138.2.R1.sintax",
-              metadata = "data/metadata_midascourse.txt",
-              fasta = "data/ASVs.R1.fa") 
+              metadata = "data/metadata_midascourse.txt") 
 
 dsn_silva <- amp_subset_samples(d_silva,
                                 minreads = 10000, # remove samples with less than 10000 reads
@@ -145,7 +146,7 @@ dsn_silva
 ```
 	
 	
-Q5 What are the most abundant 25 genera using silva? Compare to MiDAS taxonomic assignment
+Q6 What are the most abundant 25 genera using silva? Compare to MiDAS taxonomic assignment
 ```{r}
 amp_heatmap(dsn_silva,
             normalise = F,
@@ -157,11 +158,11 @@ amp_heatmap(dsn_silva,
 ```
 	
 
-Q6 Make a timeseries plot for Ca. Phosphoribacter and Ca. Accumulibacter in Randers?
+Q7 Make a timeseries plot for Ca. Phosphoribacter and Ca. Accumulibacter in Randers?
 	hint: look into amp_subset_taxa(), amp_subset_sample(), amp_time_series()
 ```{r}
 subset <- amp_subset_taxa(data = dsn_midas, tax_vector = c("g__Ca_Phosphoribacter", "g__Ca_Accumulibacter")) %>% 
-  amp_subset_samples(SampleSite == "Randers")
+  amp_subset_samples(SampleSite == "WWTP_C")
 
 subset$metadata$SampleDate <- as.Date(subset$metadata$SampleDate, format = c("%d/%m/%Y"))
   
@@ -172,10 +173,10 @@ amp_time_series(subset,
 ```
 
 	
-Q7 Make a timeseries plot for a species and plant of your choice
+Q8 Make a timeseries plot for a species and plant of your choice
 ```{r}
 subset <- amp_subset_taxa(data = dsn_midas, tax_vector = c("g__Zoogloea")) %>% 
-  amp_subset_samples(SampleSite == "Randers")
+  amp_subset_samples(SampleSite == "WWTP_C")
 
 subset$metadata$SampleDate <- as.Date(subset$metadata$SampleDate, format = c("%d/%m/%Y"))
   
@@ -188,8 +189,8 @@ amp_time_series(subset,
 
 
 
-# extract questions 
-Qe1 Make an ordination plot for all plants - Try different ordinations, e.g PCoA based on bray-curtis distance
+# extra  questions 
+Qe1-a Make an ordination plot for all plants - Try different ordinations, e.g PCoA based on bray-curtis distance
   hint: look into amp_ordinate()
 ```{r}
 amp_ordinate(dsn_midas, 
@@ -204,6 +205,21 @@ amp_ordinate(dsn_midas,
 
 ```
 
+Qe1-b Make an ordination plot for a plant of your choice to explore the temporal dynamics of the overall microbial structure
+  hint: subset first for your chosen WWTP
+```{r}
+plant_subset <- amp_subset_samples(dsn_midas, SampleSite == "WWTP_A")
+
+plant_subset$metadata$SampleDate <- as.Date(plant_subset$metadata$SampleDate, format = c("%d/%m/%Y"))
+
+
+amp_ordinate(plant_subset, 
+             sample_trajectory = "SampleDate",
+             sample_color_by = "SampleDate",
+             sample_label_by = "Month")
+
+```
+
 Qe2 How many of the top 25 genera are filamentous?
 	hint: look into amp_heatmap(…, plot_functions = TRUE). Needs tax_aggregate at genus-level
 ```{r}
@@ -213,7 +229,7 @@ amp_heatmap(dsn_midas,
             plot_functions = T,
             group_by = 'SampleSite',
             tax_show = 25,
-            sort_by = 'Lynetten')
+            sort_by = 'WWPT_B')
 
 ```
 	
