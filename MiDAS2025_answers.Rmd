@@ -5,6 +5,7 @@ date: "`r format(Sys.time(), '%Y-%m-%d')`, Aalborg, Denmark"
 output: html_document
 ---
 
+# Questions for the MiDAS course - ampvis hands on. Whenever you encounter "..." it means you should fill something in there.
 
 ## Only do ONCE!!!! 
 ```{r, eval = F}
