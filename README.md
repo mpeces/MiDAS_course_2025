@@ -13,3 +13,8 @@ For the exercises we will be using the [ampvis2](https://kasperskytte.github.io/
 ## Relevant literature
 - [MiDAS 4 paper](https://www.nature.com/articles/s41467-022-29438-7): A global catalogue of full-length 16S rRNA gene sequences and taxonomy for studies of bacterial communities in wastewater treatment plants.
 - [MiDAS 5 paper](https://www.nature.com/articles/s41467-024-49641-y): MiDAS 5: Global diversity of bacteria and archaea in anaerobic digesters
+
+
+## Contact
+Sofie: szv@bio.aau.dk
+Miriam: mpg@bio.aau.dk
