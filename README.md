@@ -16,5 +16,6 @@ For the exercises we will be using the [ampvis2](https://kasperskytte.github.io/
 
 
 ## Contact
-Sofie: szv@bio.aau.dk
-Miriam: mpg@bio.aau.dk
+Sofie Zacho Vestergaard: szv@bio.aau.dk
+
+Miriam Peces: mpg@bio.aau.dk
