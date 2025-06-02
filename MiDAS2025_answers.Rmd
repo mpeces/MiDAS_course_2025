@@ -230,14 +230,13 @@ amp_heatmap(dsn_midas,
             plot_functions = T,
             group_by = 'SampleSite',
             tax_show = 25,
-            sort_by = 'WWPT_B')
+            sort_by = 'WWTP_B')
 
 ```
 	
 Qe3 Which genera within Proteobacteria are the most abundant across all samples?
 	hint: look into amp_subset_taxa()
 ```{r}
-
 proteo <- amp_subset_taxa(dsn_midas,
                           tax_vector = 'p__Proteobacteria',
                           normalise = F)
@@ -260,7 +259,7 @@ alpha <- amp_alpha_diversity(amp_subset_samples(d_midas,
 
 
 ggplot(alpha) +
-  geom_boxplot(aes(x=SampleSite, y = ObservedOTUs, fill = SampleSite),
+  geom_boxplot(aes(x=SampleSite, y = uniqueOTUs, fill = SampleSite),
               )
 
 ggplot(alpha) +
