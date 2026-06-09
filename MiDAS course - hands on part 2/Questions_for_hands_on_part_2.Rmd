@@ -1,0 +1,92 @@
+---
+title: "MiDAS course: Hands on - part 2"
+author: "Marie Riisgaard-Jensen"
+date: "`r format(Sys.time(), '%Y-%m-%d')`, Aalborg, Denmark"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Questions for the MiDAS course - ampvis hands on part 2. 
+
+
+## Load the packages
+
+```{r, warning = F, message=F}
+library(ampvis2)
+library(tidyverse)
+library(patchwork) ## Combine different plot using '+'
+
+```
+
+## Set your working directory - only if you did not open script from the downloaded folder
+```{r, eval = FALSE}
+#setwd("") 
+```
+
+
+# Details about the pipelines
+
+**ASV based: **
+Pipeline: https://github.com/KasperSkytte/snakemake_usearch 
+
+**Alignment based (95% identity)**
+Pipeline: https://github.com/cmc-aau/nanopore_16Samp 
+
+## Load the data into an ampvis object
+
+- Rember to adjust paths
+
+```{r}
+
+setwd("...")
+
+
+metadata <- read.csv("metadata.csv") %>%
+  mutate(SampleID = Barcode) %>% relocate(SampleID) 
+
+
+# Alignment based (minimap min identity 95%)
+## Raw read (in counts)
+d_alignment_raw <- amp_load(otutable = "Alignment-based/alignment_otutable_mappedreads.tsv",
+              metadata = metadata) 
+## Normalised data (in percentage: with relative abundances are calculated taking non-mapped reads into account)
+d_alignment_norm <- amp_load(otutable = "Alignment-based/alignment_otutable_normalised.tsv",
+              metadata = metadata) 
+
+## Summary file 
+summary_reads_align <- read.csv("Alignment-based/alignment_summary.txt") 
+
+
+
+# ASV based 
+d_ASV <- amp_load(otutable = "ASV-based/ASV_abund_table.tsv",
+              taxonomy = "ASV-based/ASV_zOTUs.sintax",
+              metadata = metadata
+              ) 
+# Total reads 
+summary_reads_ASV <- read.csv("ASV-based/ASV_totalreads.csv") 
+
+```
+
+
+# Questions: 
+
+Explain and/or make plots i order to answer the questions
+
+- What are the main difference between the datasets? 
+- How are unclassified reads treated?
+- How many reads are unmapped in the two datasets? What do these represent? 
+- Calculate alpha diversity indexes - what do they tell. What is the importance of rarefaction 
+- How many distinct ASVs/Species/Genus/.. are present for each dataset - how many are shared? What is the effect of adding an abundance cutoff? 
+- What are the most abundant taxa - does if differ depending on taxonomic level?
+- Consider how to merge dataset to visualize betadiversity
+- At which taxonomic level would you trust the datasets? Why?  
+
+
+
+
+
