@@ -148,11 +148,11 @@ amp_heatmap(dsn_silva,
 
 
 
-Q7 Make a timeseries plot for Ca. Phosphoribacter and Ca. Accumulibacter in Randers?
+Q7 Make a timeseries plot for Ca. Phosphoribacter and Ca. Accumulibacter in WWTP_C?
 	hint: look into amp_subset_taxa(), amp_subset_sample(), amp_time_series()
 ```{r}
 subset <- amp_subset_taxa(data = dsn_midas, tax_vector = c("g__Ca_Phosphoribacter", "g__Ca_Accumulibacter")) %>% 
-  amp_subset_samples(SampleSite == "Randers")
+  amp_subset_samples(SampleSite == "WWTP_C")
 
 subset$metadata$SampleDate <- as.Date(subset$metadata$SampleDate, format = c("%d/%m/%Y"))
   
