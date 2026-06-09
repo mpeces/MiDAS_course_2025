@@ -1,4 +1,4 @@
-# MiDAS workshop 2025 MEWE, Atlanta
+# MiDAS workshop
 #### Application of the MiDAS reference databases and ampvis2 for microbial community analyses
 
 
