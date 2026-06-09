@@ -1,5 +1,5 @@
 ---
-title: "MiDAS_course_2025"
+title: "MiDAS_course"
 author: "Miriam Peces, Sofie Zacho Vestergaard, Marta Nierychlo"
 date: "`r format(Sys.time(), '%Y-%m-%d')`, Aalborg, Denmark"
 output: html_document
