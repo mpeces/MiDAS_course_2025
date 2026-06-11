@@ -1,0 +1,775 @@
+---
+title: "MiDAS course: Hands on - part 2"
+author: "Marie Rissgaard-Jensen"
+date: "`r format(Sys.time(), '%Y-%m-%d')`, Aalborg, Denmark"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Questions for the MiDAS course - ampvis hands on part 2. 
+
+
+### Load the packages
+
+```{r, warning = F, message=F}
+library(ampvis2)
+library(tidyverse)
+library(patchwork) ## Combine different plot using '+'
+library(vegan) ## To calculate distance matrix between samples  
+
+```
+
+### Set your working directory - only if you did not open script from the downloaded folder
+```{r}
+setwd("C:/Users/HD95LP/Downloads/output/MiDAS course - hands on part 2") 
+WD = "C:/Users/HD95LP/Downloads/output/MiDAS course - hands on part 2/"
+
+```
+
+
+# Details about the pipelines
+
+
+**ASV based: **
+Pipeline: https://github.com/KasperSkytte/snakemake_usearch 
+
+
+
+**Alignment based (95% identity)**
+Pipeline: https://github.com/cmc-aau/nanopore_16Samp 
+
+
+
+## Load the data into an ampvis object
+
+- Remember to adjust paths
+
+```{r}
+
+metadata <- read.csv(paste0(WD, "metadata.csv")) %>%
+  mutate(SampleID = Barcode) %>% relocate(SampleID) %>% 
+  mutate(PlantID = case_when(LibID == "PCR pos" ~ "PCR pos",
+                             LibID == "PCR neg" ~ "PCR neg", .default = PlantID
+                             ))
+
+# Alignment based (minimap min identity 95%)
+## Raw read (in counts)
+d_alignment_raw <- amp_load(otutable = paste0(WD, "Alignment-based/alignment_otutable_mappedreads.tsv"),
+              metadata = metadata) 
+## Normalised data (in percentage: with relative abundances are calculated taking non-mapped reads into account)
+d_alignment_norm <- amp_load(otutable = paste0(WD, "Alignment-based/alignment_otutable_normalised.tsv"),
+              metadata = metadata) 
+
+## Summary file 
+summary_reads_align <- vroom::vroom(paste0(WD, "Alignment-based/alignment_summary.txt"), show_col_types = F) 
+
+# ASV based 
+d_ASV <- amp_load(otutable = paste0(WD, "ASV-based/ASV_abund_table.tsv"),
+              taxonomy = paste0(WD, "ASV-based/ASV_zOTUs.sintax"),
+              metadata = metadata
+              ) 
+# Total reads 
+summary_reads_ASV <- read.csv(paste0(WD, "ASV-based/ASV_totalreads.csv"), header = F, col.names = c("SampleID", "total_reads")) 
+
+```
+
+# QC 
+
+
+### Ordination 
+```{r}
+
+amp_ordinate(d_ASV, sample_color_by = "PlantID") + 
+        labs(subtitle = "ASV-based") +
+  amp_ordinate(d_alignment_norm, sample_color_by = "PlantID") +
+          labs(subtitle = "alignment-based")  + 
+  plot_layout(guides = "collect")
+
+```
+
+### Ordination - no control
+
+```{r}
+amp_ordinate(d_ASV %>% amp_subset_samples(!str_detect(PlantID,  "PCR")), sample_color_by = "PlantID") + 
+        labs(subtitle = "ASV-based") +
+  amp_ordinate(d_alignment_norm %>% amp_subset_samples(!str_detect(PlantID,  "PCR")), sample_color_by = "PlantID") +
+          labs(subtitle = "alignment-based") + 
+  plot_layout(guides = "collect")
+
+```
+
+
+### Rarefaction 
+
+```{r}
+amp_rarecurve(d_ASV, color_by =  "PlantID") + 
+      labs(subtitle = "ASV-based") +
+  amp_rarecurve(d_alignment_raw, color_by = "PlantID") +
+        labs(subtitle = "alignment-based")  + 
+  plot_layout(guides = "collect")
+```
+
+
+
+# Questions: 
+
+Explain and/or make plots in order to answer the questions
+
+- What are the main difference between the datasets? 
+- How are unclassified reads treated?
+- How many reads are unmapped in the two datasets? What do these represent? 
+- Calculate alpha diversity indexes - what do they tell. What is the importance of rarefaction 
+- How many distinct ASVs/Species/Genus/.. are present for each dataset - how many are shared? What is the effect of adding an abundance cutoff? 
+- What are the most abundant taxa - does if differ depending on taxonomic level?
+- Consider how to merge dataset to visualize betadiversity
+- At which taxonomic level would you trust the datasets? Why?
+
+
+# How are unclassified reads treated?
+
+**ASV-based**: Novelty is clustered into ASVs without any classification
+
+
+**Alignment-based**: No match: the read will be put into a single unclassified group
+
+
+### Unclassified when using an ASV based approch 
+
+```{r}
+
+d_ASV$tax %>% 
+  mutate(Order = if_else(Order == "", " Unclassified", Order)) %>% 
+  arrange((Order)) %>% head()
+
+
+d_ASV$tax %>% 
+  mutate(Family = if_else(Family == "", " Unclassified", Order)) %>% 
+  arrange((Family)) %>% head(n = 10)
+
+
+d_ASV$tax %>% 
+  mutate(Genus = if_else(Genus == "", " Unclassified", Order)) %>% 
+  arrange((Genus)) %>% head(n = 10)
+
+
+```
+
+
+### Summary of read/abundance in the ampvis object
+
+```{r}
+
+
+d_alignment_norm$abund %>% colSums()
+d_alignment_raw$abund %>% colSums()
+
+## ASV based
+d_ASV$abund %>% colSums()
+amp_subset_samples(d_ASV, normalise = T)[[1]] %>% colSums()
+
+```
+
+
+
+# How many reads are unmapped in the two datasets? What do these represent?
+
+```{r}
+merged_alpha_div <- 
+  rbind(
+    d_alignment_raw %>% amp_alpha_diversity() %>% mutate(type = "alignment") %>%
+      left_join(summary_reads_align %>% select(barcode, total_filtered_reads) %>% 
+                  rename("SampleID" = "barcode", 
+                         "total_reads" = "total_filtered_reads"), by = join_by(SampleID)),
+    d_ASV %>% amp_alpha_diversity() %>% mutate(type = "ASV") %>%
+      left_join(summary_reads_ASV, by = join_by(SampleID)))
+```
+
+### Mapped read summery
+
+```{r}
+merged_alpha_div %>% 
+ggplot(
+    aes(x = PlantID, y = Reads, colour = type)
+  ) + 
+    geom_point(aes(group = type)) + 
+  geom_boxplot() 
+
+```
+
+### Total and mapped reads summery
+```{r}
+merged_alpha_div %>% 
+    pivot_longer(cols = c(total_reads, Reads)) %>% 
+  ggplot(
+    aes(x = type, y = value, colour = name)
+  ) + 
+    geom_point() + 
+  geom_boxplot() +
+    #labs(subtitle = "Rarefied 70137 reads") +
+    facet_wrap(~PlantID, scales = "free_y", nrow = 2)
+```
+
+### Percent mapped reads 
+```{r}
+merged_alpha_div %>% 
+    filter(!str_detect(PlantID,  "PCR")) %>% 
+  mutate(p = Reads/total_reads*100) %>% 
+    pivot_longer(cols = c(total_reads, Reads)) %>% 
+  ggplot(
+    aes(x = PlantID, y = p, colour = type)
+  ) + 
+    geom_point() + 
+  scale_y_continuous(limits = c(50,100)) +
+  geom_boxplot() #+
+    #labs(subtitle = "Rarefied 70137 reads") +
+    facet_wrap(~PlantID, scales = "free_y") 
+  
+```
+
+
+##  Calculate alpha diversity indexes - what do they tell. What is the importance of rarefaction 
+
+### Visualise differnet indexes
+
+```{r}
+
+merged_alpha_div_rare <- 
+  rbind(
+  d_alignment_raw %>% amp_subset_samples(minreads = 70137, rarefy = 70137) %>% 
+      amp_alpha_diversity() %>% mutate(type = "alignment") %>%
+      left_join(summary_reads_align %>% select(barcode, total_filtered_reads) %>% 
+                  rename("SampleID" = "barcode", 
+                         "total_reads" = "total_filtered_reads")),
+  d_ASV %>% amp_subset_samples(minreads = 70137, rarefy = 70137) %>% 
+    amp_alpha_diversity() %>% mutate(type = "ASV") %>%
+      left_join(summary_reads_ASV))
+
+merged_alpha_div %>% 
+    filter(!str_detect(PlantID,  "PCR")) %>% 
+  pivot_longer(cols = c(invSimpson , uniqueOTUs,  Shannon)) %>% 
+  ggplot(
+    aes(x = PlantID, y = value, colour = type)
+  ) + 
+    geom_point() + 
+  geom_boxplot() +
+  labs(subtitle = "Non rarefied") +
+    facet_wrap(~name, scales = "free_y") +
+merged_alpha_div_rare %>% 
+  select(-Simpson) %>% 
+    filter(!str_detect(PlantID,  "PCR")) %>% 
+  pivot_longer(cols = c(invSimpson , uniqueOTUs,  Shannon)) %>% 
+  ggplot(
+    aes(x = PlantID, y = value, colour = type)
+  ) + 
+    geom_point() + 
+  geom_boxplot() +
+    labs(subtitle = "Rarefied 70137 reads") +
+    facet_wrap(~name, scales = "free_y") + 
+  plot_layout(nrow = 2)
+
+
+```
+
+### Octave plots
+
+Generates an octave plot to assess alpha diversity. An octave plot is a histogram of the number of taxa observed by bins of read counts, where the bin ranges increase exponentially, see details.
+
+```{r}
+
+amp_octave(d_ASV, 
+           group_by = "PlantID",
+            tax_aggregate = "Species" 
+           )
+
+amp_octave(d_alignment_raw, 
+                      group_by = "PlantID", 
+           tax_aggregate = "Species" ,
+           #tax_aggregate = "Genus"
+           )
+
+
+```
+
+
+
+# How many distinct ASVs/Species/Genus/.. are present for each dataset - how many are shared? What is the effect of adding an abundance cutoff? 
+
+
+```{r}
+long_data_merged <- rbind(
+  amp_export_long(d_alignment_norm) %>% mutate(type = "alignment"),
+  amp_export_long(amp_subset_samples(d_ASV, normalise = T)) %>% mutate(type = "ASV")) %>% 
+  as_tibble() %>% 
+    filter(!str_detect(PlantID,  "PCR"))
+
+
+```
+
+
+## Number of taxa (with abundance filte)
+
+### No filter
+
+```{r}
+long_data_merged %>% 
+  filter(count > 0) %>%  ## <---  CHANGE FILTER
+  group_by(type) %>% 
+  summarise(
+    ASVs = n_distinct(OTU), 
+    Species = n_distinct(Species), 
+    Genera = n_distinct(Genus), 
+    Families = n_distinct(Family), 
+    Orders = n_distinct(Order), 
+    Phyla = n_distinct(Phylum)
+  ) %>% 
+  pivot_longer(cols = -c(type)) %>% 
+  mutate(name = factor(name, levels = c("ASVs", "Species", "Genera", "Families", "Orders", "Phyla"))) %>% 
+  ggplot(aes(x = name, y = value, fill = type)) + 
+  geom_col(position = "dodge") +
+  facet_wrap(~name, scales = "free", nrow = 1)
+
+
+```
+
+### 0.01
+
+```{r}
+long_data_merged %>% 
+  filter(count > 0.01) %>%  ## <---  CHANGE FILTER
+  group_by(type) %>% 
+  summarise(
+    ASVs = n_distinct(OTU), 
+    Species = n_distinct(Species), 
+    Genera = n_distinct(Genus), 
+    Families = n_distinct(Family), 
+    Orders = n_distinct(Order), 
+    Phyla = n_distinct(Phylum)
+  ) %>% 
+  pivot_longer(cols = -c(type)) %>% 
+  mutate(name = factor(name, levels = c("ASVs", "Species", "Genera", "Families", "Orders", "Phyla"))) %>% 
+  ggplot(aes(x = name, y = value, fill = type)) + 
+  geom_col(position = "dodge") +
+  facet_wrap(~name, scales = "free", nrow = 1)
+
+
+```
+
+### 0.1
+
+```{r}
+long_data_merged %>% 
+  filter(count > 0.1) %>%  ## <---  CHANGE FILTER
+  group_by(type) %>% 
+  summarise(
+    ASVs = n_distinct(OTU), 
+    Species = n_distinct(Species), 
+    Genera = n_distinct(Genus), 
+    Families = n_distinct(Family), 
+    Orders = n_distinct(Order), 
+    Phyla = n_distinct(Phylum)
+  ) %>% 
+  pivot_longer(cols = -c(type)) %>% 
+  mutate(name = factor(name, levels = c("ASVs", "Species", "Genera", "Families", "Orders", "Phyla"))) %>% 
+  ggplot(aes(x = name, y = value, fill = type)) + 
+  geom_col(position = "dodge") +
+  facet_wrap(~name, scales = "free", nrow = 1)
+
+
+```
+
+## Number of shared taxa (with abundance filte)
+
+```{r}
+
+shared_unique_taxa <- long_data_merged %>% 
+  filter(count > 0.01) %>%                 ## <---  CHANGE FILTER
+  select(type, OTU, Species, Genus, Family, Order, Phylum) %>% 
+  pivot_longer(
+    cols = c(OTU, Species, Genus, Family, Order, Phylum),
+    names_to = "tax_level",
+    values_to = "taxon"
+  ) %>% 
+  filter(!is.na(taxon), taxon != "") %>% 
+  distinct(tax_level, taxon, type) %>% 
+  group_by(tax_level, taxon) %>% 
+  mutate(
+    n_types = n_distinct(type),
+    status = if_else(n_types == 1, "Unique", "Shared")
+  ) %>% 
+  ungroup()
+
+
+shared_unique_taxa %>% 
+  count(type, tax_level, status, name = "n_taxa") %>% 
+  mutate(
+    tax_level = factor(
+      tax_level,
+      levels = c("OTU", "Species", "Genus", "Family", "Order", "Phylum"),
+      labels = c("ASVs", "Species", "Genera", "Families", "Orders", "Phyla")
+    )
+  ) %>% 
+  ggplot(aes(x = status, y = n_taxa, fill = type)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~tax_level, scales = "free_y", nrow = 2) +
+  labs(
+    x = NULL,
+    y = "Number of taxa",
+    fill = "Sample type"
+  ) +
+  theme_bw()
+```
+
+
+# What are the most abundant taxa - does if differ depending on taxonomic level?
+
+
+## Species
+```{r}
+
+amp_heatmap(d_ASV %>% amp_subset_samples(!str_detect(PlantID,  "PCR")),
+            group_by = "PlantID", 
+            normalise = T,
+            tax_show = 15,
+            tax_aggregate = "Species")+
+      labs(subtitle = "ASV-based") +   theme(axis.text.y = element_text(size = 10)) +
+  amp_heatmap(d_alignment_norm %>% amp_subset_samples(!str_detect(PlantID,  "PCR")), 
+                 group_by = "PlantID", 
+              normalise = F,
+              tax_show = 15,
+              tax_aggregate = "Species") +
+        labs(subtitle = "alignment-based")  + theme(axis.text.y = element_text(size = 10))
+
+```
+
+## Genus
+```{r}
+
+amp_heatmap(d_ASV %>% amp_subset_samples(!str_detect(PlantID,  "PCR")),
+            group_by = "PlantID", 
+            normalise = T,
+            tax_show = 15,
+            tax_aggregate = "Genus")+
+      labs(subtitle = "ASV-based") +   theme(axis.text.y = element_text(size = 10)) +
+  amp_heatmap(d_alignment_norm %>% amp_subset_samples(!str_detect(PlantID,  "PCR")), 
+                 group_by = "PlantID", 
+              normalise = F,
+              tax_show = 15,
+              tax_aggregate = "Genus") +
+        labs(subtitle = "alignment-based")  + theme(axis.text.y = element_text(size = 10))
+
+```
+
+## Family
+
+```{r}
+
+amp_heatmap(d_ASV %>% amp_subset_samples(!str_detect(PlantID,  "PCR")),
+            group_by = "PlantID", 
+            normalise = T,
+            tax_show = 15,
+            tax_aggregate = "Family")+
+      labs(subtitle = "ASV-based") +   theme(axis.text.y = element_text(size = 10)) +
+  amp_heatmap(d_alignment_norm %>% amp_subset_samples(!str_detect(PlantID,  "PCR")), 
+                 group_by = "PlantID", 
+              normalise = F,
+              tax_show = 15,
+              tax_aggregate = "Family") +
+        labs(subtitle = "alignment-based")  + theme(axis.text.y = element_text(size = 10))
+
+```
+
+
+
+# Consider how to merge dataset to visualize betadiversity
+
+--> no match between the ASVs 
+--> Aggregate at higher taxonomic rank e.g. Species or Genus
+
+*Install the vegan package*
+
+## Species
+
+```{r}
+
+make_df <- long_data_merged %>% 
+  group_by(Species, Barcode, type, PlantID) %>% 
+  summarise(rel_abun = sum(count)) %>%
+  ungroup() %>% 
+  mutate(Species = if_else(Species == "", "Unclassified", Species)) %>% 
+  filter(Species != "Unclassified")  %>%     ## Remove unclassified taxa 
+  select(Barcode, type, PlantID,Species, rel_abun) %>% 
+  mutate(SampleID = paste0(type, "_", Barcode)) %>% relocate(SampleID) %>% 
+  filter(rel_abun > 0.001) 
+
+# Format as matrix
+species_mat <- make_df %>% 
+  pivot_wider(
+    names_from = Species,
+    values_from = rel_abun,
+    values_fill = 0
+  )
+
+# Metadata
+metadata <- species_mat %>%
+  select(SampleID, type, PlantID)
+
+comm <- species_mat %>%
+  select(-SampleID, -Barcode, -type, -PlantID) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  as.data.frame()
+
+rownames(comm) <- metadata$SampleID
+
+# Calculate distance matrix
+bc_dist <- vegan::vegdist(comm, method = "bray")
+
+
+# PCoA
+pcoa <- cmdscale(bc_dist, eig = TRUE, k = 2)
+
+pcoa_df <- data.frame(
+  SampleID = rownames(comm),
+  Axis1 = pcoa$points[,1],
+  Axis2 = pcoa$points[,2]
+) %>%
+  left_join(metadata, by = "SampleID")
+
+# Variance explained
+var_exp <- round(100 * pcoa$eig / sum(pcoa$eig[pcoa$eig > 0]), 1)
+
+# Plot
+ggplot(
+  pcoa_df,
+  aes(
+    x = Axis1,
+    y = Axis2,
+    color = PlantID,
+    shape = type
+  )
+) +
+  geom_point(size = 3) +
+  labs(
+    x = paste0("PCoA1 (", var_exp[1], "%)"),
+    y = paste0("PCoA2 (", var_exp[2], "%)")
+  ) +
+  theme_bw()
+
+```
+
+## Species - one plant
+
+```{r}
+
+make_df <- long_data_merged %>% 
+  filter(PlantID == "AAW") %>% 
+  group_by(Species, Barcode, type, PlantID) %>% 
+  summarise(rel_abun = sum(count)) %>%
+  ungroup() %>% 
+  mutate(Species = if_else(Species == "", "Unclassified", Species)) %>% 
+  filter(Species != "Unclassified")  %>%     ## Remove unclassified taxa 
+  select(Barcode, type, PlantID,Species, rel_abun) %>% 
+  mutate(SampleID = paste0(type, "_", Barcode)) %>% relocate(SampleID) %>% 
+  filter(rel_abun > 0.01) 
+
+# Format as matrix
+species_mat <- make_df %>% 
+  pivot_wider(
+    names_from = Species,
+    values_from = rel_abun,
+    values_fill = 0
+  )
+
+# Metadata
+metadata <- species_mat %>%
+  select(SampleID, type, PlantID)
+
+comm <- species_mat %>%
+  select(-SampleID, -Barcode, -type, -PlantID) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  as.data.frame()
+
+rownames(comm) <- metadata$SampleID
+
+# Calculate distance matrix
+bc_dist <- vegan::vegdist(comm, method = "bray")
+
+
+# PCoA
+pcoa <- cmdscale(bc_dist, eig = TRUE, k = 2)
+
+pcoa_df <- data.frame(
+  SampleID = rownames(comm),
+  Axis1 = pcoa$points[,1],
+  Axis2 = pcoa$points[,2]
+) %>%
+  left_join(metadata, by = "SampleID")
+
+# Variance explained
+var_exp <- round(100 * pcoa$eig / sum(pcoa$eig[pcoa$eig > 0]), 1)
+
+# Plot
+ggplot(
+  pcoa_df,
+  aes(
+    x = Axis1,
+    y = Axis2,
+    color = PlantID,
+    shape = type
+  )
+) +
+  geom_point(size = 3) +
+  labs(
+    x = paste0("PCoA1 (", var_exp[1], "%)"),
+    y = paste0("PCoA2 (", var_exp[2], "%)")
+  ) +
+  theme_bw()
+
+```
+
+## Genus
+
+```{r}
+
+make_df <- long_data_merged %>% 
+  group_by(Genus, Barcode, type, PlantID) %>% 
+  summarise(rel_abun = sum(count)) %>%
+  ungroup() %>% 
+  mutate(Genus = if_else(Genus == "", "Unclassified", Genus)) %>% 
+  filter(Genus != "Unclassified")  %>%     ## Remove unclassified taxa 
+  select(Barcode, type, PlantID,Genus, rel_abun) %>% 
+  mutate(SampleID = paste0(type, "_", Barcode)) %>% relocate(SampleID) %>% 
+  filter(rel_abun > 0.01) 
+
+# Format as matrix
+species_mat <- make_df %>% 
+  pivot_wider(
+    names_from = Genus,
+    values_from = rel_abun,
+    values_fill = 0
+  )
+
+# Metadata
+metadata <- species_mat %>%
+  select(SampleID, type, PlantID)
+
+comm <- species_mat %>%
+  select(-SampleID, -Barcode, -type, -PlantID) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  as.data.frame()
+
+rownames(comm) <- metadata$SampleID
+
+# Calculate distance matrix
+bc_dist <- vegan::vegdist(comm, method = "bray")
+
+
+# PCoA
+pcoa <- cmdscale(bc_dist, eig = TRUE, k = 2)
+
+pcoa_df <- data.frame(
+  SampleID = rownames(comm),
+  Axis1 = pcoa$points[,1],
+  Axis2 = pcoa$points[,2]
+) %>%
+  left_join(metadata, by = "SampleID")
+
+# Variance explained
+var_exp <- round(100 * pcoa$eig / sum(pcoa$eig[pcoa$eig > 0]), 1)
+
+# Plot
+ggplot(
+  pcoa_df,
+  aes(
+    x = Axis1,
+    y = Axis2,
+    color = PlantID,
+    shape = type
+  )
+) +
+  geom_point(size = 3) +
+  labs(
+    x = paste0("PCoA1 (", var_exp[1], "%)"),
+    y = paste0("PCoA2 (", var_exp[2], "%)")
+  ) +
+  theme_bw()
+
+```
+
+## Genus - one plant
+
+```{r}
+
+make_df <- long_data_merged %>% 
+    filter(PlantID == "AAW") %>% 
+  group_by(Genus, Barcode, type, PlantID) %>% 
+  summarise(rel_abun = sum(count)) %>%
+  ungroup() %>% 
+  mutate(Genus = if_else(Genus == "", "Unclassified", Genus)) %>% 
+  filter(Genus != "Unclassified")  %>%     ## Remove unclassified taxa 
+  select(Barcode, type, PlantID,Genus, rel_abun) %>% 
+  mutate(SampleID = paste0(type, "_", Barcode)) %>% relocate(SampleID) %>% 
+  filter(rel_abun > 0.01) 
+
+# Format as matrix
+species_mat <- make_df %>% 
+  pivot_wider(
+    names_from = Genus,
+    values_from = rel_abun,
+    values_fill = 0
+  )
+
+# Metadata
+metadata <- species_mat %>%
+  select(SampleID, type, PlantID)
+
+comm <- species_mat %>%
+  select(-SampleID, -Barcode, -type, -PlantID) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  as.data.frame()
+
+rownames(comm) <- metadata$SampleID
+
+# Calculate distance matrix
+bc_dist <- vegan::vegdist(comm, method = "bray")
+
+
+# PCoA
+pcoa <- cmdscale(bc_dist, eig = TRUE, k = 2)
+
+pcoa_df <- data.frame(
+  SampleID = rownames(comm),
+  Axis1 = pcoa$points[,1],
+  Axis2 = pcoa$points[,2]
+) %>%
+  left_join(metadata, by = "SampleID")
+
+# Variance explained
+var_exp <- round(100 * pcoa$eig / sum(pcoa$eig[pcoa$eig > 0]), 1)
+
+# Plot
+ggplot(
+  pcoa_df,
+  aes(
+    x = Axis1,
+    y = Axis2,
+    color = PlantID,
+    shape = type
+  )
+) +
+  geom_point(size = 3) +
+  labs(
+    x = paste0("PCoA1 (", var_exp[1], "%)"),
+    y = paste0("PCoA2 (", var_exp[2], "%)")
+  ) +
+  theme_bw()
+
+```
+
+
+# At which taxonomic level would you trust the datasets? Why?
+
+
